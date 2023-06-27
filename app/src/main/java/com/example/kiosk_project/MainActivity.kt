@@ -6,13 +6,21 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.os.BatteryManager
 import android.os.Bundle
 import android.os.UserManager
 import android.provider.Settings
+import android.util.Log
 import android.view.View
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -61,7 +69,10 @@ import java.io.InputStreamReader
 import java.lang.Exception
 import java.lang.StringBuilder
 
-
+/**
+ * @author Eliomar Alejandro Rodriguez Ferrer
+ * Classe MainActivity la quale ha al suo interno le funzioni grafiche
+ */
 class MainActivity : ComponentActivity() {
     private lateinit var mAdminComponentName: ComponentName
     private lateinit var mDevicePolicyManager: DevicePolicyManager
@@ -70,7 +81,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var fileOutputStream: FileOutputStream
 
     private val REQUEST_ADMIN = 1
-    private val regex = """^(https?|ftp)://[^\s/$.?#].\S*$""".toRegex()
+
+    private val regex = """^(https?|ftp)://[^\s/$.?#].\S*$""".toRegex() //Regex per l'indirizzo url
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +100,7 @@ class MainActivity : ComponentActivity() {
 
             startActivityForResult(intent, REQUEST_ADMIN)
         } else {
-            // Gli appunti principali del tuo codice
+
             if (dataRead == "ERROR" || dataRead == ""){
                 setContent {
                     Kiosk_projectTheme {
@@ -125,6 +137,7 @@ class MainActivity : ComponentActivity() {
             while (run {
                     text = bufferedReader.readLine()
                     text
+
                 } != null){
                 stringBuilder.append(text)
             }
@@ -153,7 +166,6 @@ class MainActivity : ComponentActivity() {
         if (requestCode == REQUEST_ADMIN) {
             if (resultCode == RESULT_OK) {
                 // L'utente ha accettato i permessi di amministratore
-                // Gli appunti principali del tuo codice
                 setContent {
                     Kiosk_projectTheme {
                         WebViewScreen("")
@@ -277,6 +289,7 @@ class MainActivity : ComponentActivity() {
             factory = { context ->
                 val webView = WebView(context)
                 setupWebView(webView)
+
                 webView.loadUrl(url)
 
                 webView
@@ -429,8 +442,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setupWebView(webView: WebView) {
-        webView.webViewClient = object : WebViewClient() {
+        val webSettings = webView.settings
+        webSettings.javaScriptEnabled = true // Abilita l'esecuzione di JavaScript
+        webSettings.domStorageEnabled = true // Abilita lo storage del DOM
 
+        // Imposta un WebViewClient per gestire le richieste e le risposte
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                // L'intera pagina è stata caricata
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                // Gestisci l'apertura dei link all'interno del WebView stesso
+                view?.loadUrl(request?.url.toString())
+                return true
+            }
         }
     }
+
 }
