@@ -6,24 +6,16 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Bitmap
 import android.os.BatteryManager
 import android.os.Bundle
 import android.os.UserManager
 import android.provider.Settings
-import android.util.Log
 import android.view.View
-import android.webkit.ConsoleMessage
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -71,36 +62,44 @@ import java.lang.StringBuilder
 
 /**
  * @author Eliomar Alejandro Rodriguez Ferrer
- * Classe MainActivity la quale ha al suo interno le funzioni grafiche
+ * Classe MainActivity la quale implementa l'utilizzo della modalità "kiosk"
  */
 class MainActivity : ComponentActivity() {
     private lateinit var mAdminComponentName: ComponentName
     private lateinit var mDevicePolicyManager: DevicePolicyManager
 
-    private lateinit var fileInputStream: FileInputStream
-    private lateinit var fileOutputStream: FileOutputStream
+    private lateinit var fileInputStream: FileInputStream //Variabile per leggere il file della memoria di massa
+    private lateinit var fileOutputStream: FileOutputStream //Variabile per scrivere il file nella memoria di massa
 
     private val REQUEST_ADMIN = 1
 
-    private val regex = """^(https?|ftp)://[^\s/$.?#].\S*$""".toRegex() //Regex per l'indirizzo url
+    private val regex = """^(https?|ftp)://[^\s/$.?#].\S*$""".toRegex() //Regex per l'indirizzo url, esempio per la regex: "https://google.com"
 
+    /**
+     * Funzione ereditata dalla classe ComponentActivity per creare la grafica
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         mAdminComponentName = ComponentName(this, MyDeviceAdminReceiver::class.java)
         mDevicePolicyManager = getSystemService(DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
-        val dataRead = readDataFile()
+        val dataRead = readDataFile() //Variavile della lettura dei dati
 
         // Verifica se l'app ha già i permessi di amministratore
         if (!mDevicePolicyManager.isAdminActive(mAdminComponentName)) {
-            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN) //Chiede i permessi se non ci sono
+
             intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, mAdminComponentName)
-            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Motivo per cui l'app richiede i permessi di amministratore")
+            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Si chiedono per i permessi per poter bloccare certe funzionalità del tablet.")
 
             startActivityForResult(intent, REQUEST_ADMIN)
         } else {
-
+            /*
+             * If che controlla se esiste il il file nel dispositivo o se nel file c'è il link da cercare nella webview-
+             * Se il file c'è apre direttamente la schermata del sito web, altrimenti apre la barra per cercare l'url.
+             */
             if (dataRead == "ERROR" || dataRead == ""){
                 setContent {
                     Kiosk_projectTheme {
@@ -111,7 +110,7 @@ class MainActivity : ComponentActivity() {
             }else{
                 setContent {
                     Kiosk_projectTheme {
-                        InsertUrl()
+                        WebViewVisualizzazioneDaFile(infoDaFile = dataRead)
                     }
                 }
             }
@@ -191,7 +190,7 @@ class MainActivity : ComponentActivity() {
         setImmersiveMode(enable)
     }
 
-    // region restrictions
+    //region restrictions
     private fun setRestrictions(disallow: Boolean) {
         setUserRestriction(UserManager.DISALLOW_SAFE_BOOT, disallow)
         setUserRestriction(UserManager.DISALLOW_FACTORY_RESET, disallow)
@@ -206,7 +205,7 @@ class MainActivity : ComponentActivity() {
     } else {
         mDevicePolicyManager.clearUserRestriction(mAdminComponentName, restriction)
     }
-    // endregion
+    //endregion
 
     private fun enableStayOnWhilePluggedIn(active: Boolean) = if (active) {
         mDevicePolicyManager.setGlobalSetting(
@@ -298,27 +297,24 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun backgroundUrl(){
-        val colore = MaterialTheme.colorScheme.tertiaryContainer
-
-        Canvas(
-            modifier = Modifier
-        ) {
-            drawCircle(
-                color = colore,
-                radius = 450f,
-                center = Offset(0f, 0f)
-            )
-        }
-
+    fun BackgroundUrl(){
         Text(
             text = "Benvenuto",
             color = MaterialTheme.colorScheme.onTertiaryContainer,
             style = MaterialTheme.typography.displayMedium,
             modifier = Modifier
                 .padding(top = 69.dp, start = 17.dp)
-
         )
+    }
+
+    @Composable
+    fun WebViewVisualizzazioneDaFile(infoDaFile: String){
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            WebViewScreen(infoDaFile)
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -336,7 +332,7 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.surface
             ) {
-                backgroundUrl()
+                BackgroundUrl()
 
                 Column(
                     modifier = Modifier
