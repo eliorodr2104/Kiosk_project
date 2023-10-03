@@ -1,21 +1,28 @@
 package com.example.kiosk_project
 
+import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.app.admin.SystemUpdatePolicy
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Bundle
 import android.os.UserManager
+import android.provider.Browser
 import android.provider.Settings
 import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,19 +59,22 @@ import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import com.example.kiosk_project.ui.theme.Kiosk_projectTheme
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
-import java.lang.Exception
-import java.lang.StringBuilder
 
 /**
  * @author Eliomar Alejandro Rodriguez Ferrer
  * Classe MainActivity la quale implementa l'utilizzo della modalità "kiosk"
  */
 class MainActivity : ComponentActivity() {
+    private lateinit var permissionLauncher: ActivityResultLauncher<Array<String>>
+    private var isBluetoothConnectPermissionGranted = false
+    private var isBluetoothAdminPermissionGranted = false
+
     private lateinit var mAdminComponentName: ComponentName
     private lateinit var mDevicePolicyManager: DevicePolicyManager
 
@@ -86,6 +96,13 @@ class MainActivity : ComponentActivity() {
 
         val dataRead = readDataFile() //Variavile della lettura dei dati
 
+        permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){ permissions ->
+            isBluetoothConnectPermissionGranted = permissions[Manifest.permission.INTERNET] ?: isBluetoothConnectPermissionGranted
+            isBluetoothAdminPermissionGranted = permissions[Manifest.permission.RECEIVE_BOOT_COMPLETED] ?: isBluetoothAdminPermissionGranted
+        }
+
+        requestPermission()
+
         // Verifica se l'app ha già i permessi di amministratore
         if (!mDevicePolicyManager.isAdminActive(mAdminComponentName)) {
 
@@ -95,6 +112,29 @@ class MainActivity : ComponentActivity() {
             intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Si chiedono per i permessi per poter bloccare certe funzionalità del tablet.")
 
             startActivityForResult(intent, REQUEST_ADMIN)
+
+            if (mDevicePolicyManager.isAdminActive(mAdminComponentName)){
+                /*
+             * If che controlla se esiste il il file nel dispositivo o se nel file c'è il link da cercare nella webview-
+             * Se il file c'è apre direttamente la schermata del sito web, altrimenti apre la barra per cercare l'url.
+             */
+                if (dataRead == "ERROR" || dataRead == ""){
+                    setContent {
+                        Kiosk_projectTheme {
+                            InsertUrl()
+                        }
+                    }
+
+                }else{
+                    setContent {
+                        Kiosk_projectTheme {
+                            //InsertUrl()
+                            WebViewVisualizzazioneDaFile(infoDaFile = dataRead)
+                        }
+                    }
+                }
+            }
+
         } else {
             /*
              * If che controlla se esiste il il file nel dispositivo o se nel file c'è il link da cercare nella webview-
@@ -110,17 +150,38 @@ class MainActivity : ComponentActivity() {
             }else{
                 setContent {
                     Kiosk_projectTheme {
+                        //InsertUrl()
                         WebViewVisualizzazioneDaFile(infoDaFile = dataRead)
                     }
                 }
             }
         }
-
         val isAdmin = isAdmin()
 
         setKioskPolicies(true, isAdmin)
+    }
 
+    private fun requestPermission(){
+        isBluetoothConnectPermissionGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.INTERNET
+        ) == PackageManager.PERMISSION_GRANTED
 
+        isBluetoothAdminPermissionGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECEIVE_BOOT_COMPLETED
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val permissionRequest: MutableList<String> = ArrayList()
+
+        if (!isBluetoothConnectPermissionGranted)
+            permissionRequest.add(Manifest.permission.INTERNET)
+
+        if (!isBluetoothAdminPermissionGranted)
+            permissionRequest.add(Manifest.permission.RECEIVE_BOOT_COMPLETED)
+
+        if (permissionRequest.isNotEmpty())
+            permissionLauncher.launch(permissionRequest.toTypedArray())
     }
 
     private fun readDataFile(): String{
@@ -162,12 +223,23 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
+        val dataRead = readDataFile() //Variavile della lettura dei dati
+
         if (requestCode == REQUEST_ADMIN) {
             if (resultCode == RESULT_OK) {
-                // L'utente ha accettato i permessi di amministratore
-                setContent {
-                    Kiosk_projectTheme {
-                        WebViewScreen("")
+                if (dataRead == "ERROR" || dataRead == ""){
+                    setContent {
+                        Kiosk_projectTheme {
+                            InsertUrl()
+                        }
+                    }
+
+                }else{
+                    setContent {
+                        Kiosk_projectTheme {
+                            //InsertUrl()
+                            WebViewVisualizzazioneDaFile(infoDaFile = dataRead)
+                        }
                     }
                 }
             } else {
@@ -283,6 +355,24 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun WebViewScreen(url: String) {
+        AndroidView(factory = {
+            WebView(it).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+
+                webViewClient = WebViewClient()
+
+                //loadUrl(url)
+            }
+        }, update = {
+            setupWebView(it)
+            it.loadUrl(url)
+        })
+
+
+        /*
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
@@ -294,6 +384,8 @@ class MainActivity : ComponentActivity() {
                 webView
             }
         )
+
+         */
     }
 
     @Composable
@@ -439,8 +531,10 @@ class MainActivity : ComponentActivity() {
 
     private fun setupWebView(webView: WebView) {
         val webSettings = webView.settings
-        webSettings.javaScriptEnabled = true // Abilita l'esecuzione di JavaScript
-        webSettings.domStorageEnabled = true // Abilita lo storage del DOM
+
+        webSettings.domStorageEnabled = true
+        webSettings.javaScriptEnabled = true
+
 
         // Imposta un WebViewClient per gestire le richieste e le risposte
         webView.webViewClient = object : WebViewClient() {
